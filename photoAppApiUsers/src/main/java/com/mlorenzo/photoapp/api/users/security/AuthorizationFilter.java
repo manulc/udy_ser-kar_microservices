@@ -30,18 +30,19 @@ public class AuthorizationFilter extends BasicAuthenticationFilter {
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
 			throws IOException, ServletException {
-		String authorizationHeader = request.getHeader(environment.getProperty("authorization.token.header.name"));
-		if(authorizationHeader == null || !authorizationHeader.startsWith(environment.getProperty("authorization.token.header.prefix"))) {		
+		String authorizationHeaderValue = request.getHeader(environment.getProperty("authorization.token.header.name"));
+		String authorizationHeaderPrefix = environment.getProperty("authorization.token.header.prefix") + " ";
+		if(authorizationHeaderValue == null || !authorizationHeaderValue.startsWith(authorizationHeaderPrefix)) {		
 			chain.doFilter(request, response);
 			return;
 		}
-		UsernamePasswordAuthenticationToken authentication = getAuthentication(authorizationHeader);
+		String token = authorizationHeaderValue.replace(authorizationHeaderPrefix, "");
+		UsernamePasswordAuthenticationToken authentication = getAuthentication(token);
 		SecurityContextHolder.getContext().setAuthentication(authentication);
 		chain.doFilter(request, response);
 	}
 
-	private UsernamePasswordAuthenticationToken getAuthentication(String authorizationHeader) {
-		String token = authorizationHeader.replace(environment.getProperty("authorization.token.header.prefix"), "");
+	private UsernamePasswordAuthenticationToken getAuthentication(String token) {
 		String userId = Jwts.parser()
 				.setSigningKey(Base64.getEncoder().encode(environment.getProperty("token.secret").getBytes()))
 				.parseClaimsJws(token)
