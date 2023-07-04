@@ -1,0 +1,4 @@
+api-logs/
+mysql/
+docker-compose/*.env
+/PhotoAppConfiguration

@@ -1,0 +1,172 @@
+version: "3"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.9.11-management-alpine
+    mem_limit: 400m
+    env_file:
+        - ./rabbitmq_secrets.env
+    ports:
+      - 5672:5672
+      - 15672:15672
+      
+  config:
+    image: photo-app-config-server:v1
+    build: ../photoAppApiConfigServer
+    mem_limit: 400m
+    ports:
+      - 8012:8012
+    environment:
+      - "spring.profiles.active=git"
+      - "spring.rabbitmq.host=rabbitmq"
+      - "spring.cloud.bus.enabled=true"
+      # Como hemos activado Spring Cloud Bus y usamos Spring Boot Actuator, también activamos la comprobación de salud de RabbitMQ
+      - "management.health.rabbit.enabled=true"
+    env_file:
+      - configserver_secrets.env
+    depends_on:
+      - rabbitmq
+      
+  eureka:
+    image: photo-app-eureka-service:v1
+    build: ../photoAppDiscoveryService
+    mem_limit: 400m
+    ports:
+      - 8010:8010
+    environment:
+      SPRING_CLOUD_CONFIG_URI: http://config:8012
+      # Con esta opción puesta a true, por defecto hace 6 reintentos de conexión con el servidor de configuraciones
+      SPRING_CLOUD_CONFIG_FAIL-FAST: true
+      # Por defecto son 1000 ms
+      #SPRING_CLOUD_CONFIG_RETRY_INITIAL-INTERVAL: 5000
+    restart: on-failure
+    depends_on:
+      - config
+      
+  zuul:
+    image: photo-app-zuul:v1
+    build: ../photoAppZuulApiGateway
+    mem_limit: 400m
+    ports:
+      - 8011:8011
+    environment:
+      - "SPRING_CLOUD_CONFIG_URI=http://config:8012"
+      - "SPRING_RABBITMQ_HOST=rabbitmq"
+      - "SPRING_CLOUD_BUS_ENABLED=true"
+        # Como hemos activado Spring Cloud Bus y usamos Spring Boot Actuator, también activamos la comprobación de salud de RabbitMQ
+      - "MANAGEMENT_HEALTH_RABBIT_ENABLED=true"
+      # Con esta opción puesta a true, por defecto hace 6 reintentos de conexión con el servidor de configuraciones
+      - "SPRING_CLOUD_CONFIG_FAILFAST=true"
+      # Por defecto son 1000 ms
+      #- "SPRING_CLOUD_CONFIG_RETRY_INITIALINTERVAL=5000"
+      - "EUREKA_HOST=eureka"
+    env_file:
+      - zuul_secrets.env
+    restart: on-failure
+    depends_on:
+      - config
+      - eureka
+      - rabbitmq
+      
+  mysql:
+    image: mysql:8
+    mem_limit: 400m
+    environment:
+      - MYSQL_DATABASE=photo-app-db
+    env_file:
+      - mysql_secrets.env
+    volumes:
+      - ../mysql:/var/lib/mysql
+    ports:
+      - 3306:3306
+      
+  zipkin:
+    image: openzipkin/zipkin:2.23.16
+    mem_limit: 400m
+    ports:
+      - 9411:9411
+      
+  users-ws:
+    image: photo-app-users-ws:v1
+    build: ../photoAppApiUsers
+    mem_limit: 400m
+    environment:
+      - spring.cloud.config.uri=http://config:8012
+      # Con esta opción puesta a true, por defecto hace 6 reintentos de conexión con el servidor de configuraciones
+      - spring.cloud.config.fail-fast=true
+      # Por defecto son 1000 ms
+      # - spring.cloud.config.retry.initial-interval=5000
+      - spring.rabbitmq.host=rabbitmq
+      - spring.cloud.bus.enabled=true
+        # Como hemos activado Spring Cloud Bus y usamos Spring Boot Actuator, también activamos la comprobación de salud de RabbitMQ
+      - management.health.rabbit.enabled=true
+      - logging.file.name=/api-logs/users-ws.log
+      - EUREKA_HOST=eureka
+      - MYSQL_HOST=mysql
+      - GATEWAY_IP=zuul
+      # Por defecto, la consola de H2 esta desactivada
+      - spring.h2.console.enabled=true
+      - spring.zipkin.base-url=http://zipkin:9411
+    env_file:
+      - users-ws_secrets.env
+    volumes:
+      - ../api-logs:/api-logs
+    restart: on-failure
+    depends_on:
+      - mysql
+      - rabbitmq
+      - config
+      - eureka
+      - zipkin
+      
+  albums-ws:
+    image: photo-app-albums-ws:v1
+    build: ../photoAppApiAlbums
+    mem_limit: 400m
+    environment:
+      spring.cloud.config.uri: http://config:8012
+      spring.cloud.config.fail-fast: true
+      # Por defecto son 1000 ms
+      #spring.cloud.config.retry.initial-interval: 5000
+      spring.rabbitmq.host: rabbitmq
+      spring.cloud.bus.enabled: true
+      logging.file.name: /api-logs/albums-ws.log
+      EUREKA_HOST: eureka
+      spring.zipkin.base-url: http://zipkin:9411
+    env_file:
+      - albums-ws_secrets.env
+    volumes:
+      - ../api-logs:/api-logs
+    restart: on-failure
+    depends_on:
+      - rabbitmq
+      - config
+      - eureka
+      - zipkin
+  
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.2.2
+    volumes:
+      - ../api-logs:/api-logs
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    mem_limit: 500m
+  
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.2.2
+    environment:
+      - discovery.type=single-node
+      # A partir de la versión 8, por defecto viene activada la seguridad(xpack security). Con esta propiedad puesta a false, la desactivamos
+      - xpack.security.enabled=false
+    mem_limit: 500m
+    ports:
+      - 9200:9200
+    depends_on:
+      - logstash
+      
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.2.2
+    mem_limit: 500m
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
