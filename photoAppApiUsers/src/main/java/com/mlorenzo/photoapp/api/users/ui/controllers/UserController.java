@@ -1,6 +1,7 @@
 package com.mlorenzo.photoapp.api.users.ui.controllers;
 
-import javax.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
@@ -38,7 +39,7 @@ public class UserController {
 	
 
 	@GetMapping("/status/check")
-	public String status() {
+	public String status(HttpServletRequest request) {
 		// En nuestro caso, la expresión "server.port" devuelve 0 y la expresión "local.server.port" devuelve el número de puerto generado
 		return "Working on port " + env.getProperty("local.server.port") + ", with token secret = " + env.getProperty("token.secret");
 	}

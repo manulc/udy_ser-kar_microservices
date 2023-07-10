@@ -11,7 +11,7 @@ services:
       - 15672:15672
       
   config:
-    image: photo-app-config-server:v1
+    image: photo-app-config-server:v2
     build: ../photoAppApiConfigServer
     mem_limit: 400m
     ports:
@@ -28,40 +28,32 @@ services:
       - rabbitmq
       
   eureka:
-    image: photo-app-eureka-service:v1
+    image: photo-app-eureka-service:v2
     build: ../photoAppDiscoveryService
     mem_limit: 400m
     ports:
       - 8010:8010
     environment:
-      SPRING_CLOUD_CONFIG_URI: http://config:8012
-      # Con esta opción puesta a true, por defecto hace 6 reintentos de conexión con el servidor de configuraciones
-      SPRING_CLOUD_CONFIG_FAIL-FAST: true
-      # Por defecto son 1000 ms
-      #SPRING_CLOUD_CONFIG_RETRY_INITIAL-INTERVAL: 5000
+      SPRING_CONFIG_IMPORT: configserver:http://config:8012
     restart: on-failure
     depends_on:
       - config
       
-  zuul:
-    image: photo-app-zuul:v1
-    build: ../photoAppZuulApiGateway
+  api-gateway:
+    image: photo-app-api-gateway:v1
+    build: ../photoAppApiGateway
     mem_limit: 400m
     ports:
       - 8011:8011
     environment:
-      - "SPRING_CLOUD_CONFIG_URI=http://config:8012"
+      - "SPRING_CONFIG_IMPORT=configserver:http://config:8012"
       - "SPRING_RABBITMQ_HOST=rabbitmq"
       - "SPRING_CLOUD_BUS_ENABLED=true"
         # Como hemos activado Spring Cloud Bus y usamos Spring Boot Actuator, también activamos la comprobación de salud de RabbitMQ
       - "MANAGEMENT_HEALTH_RABBIT_ENABLED=true"
-      # Con esta opción puesta a true, por defecto hace 6 reintentos de conexión con el servidor de configuraciones
-      - "SPRING_CLOUD_CONFIG_FAILFAST=true"
-      # Por defecto son 1000 ms
-      #- "SPRING_CLOUD_CONFIG_RETRY_INITIALINTERVAL=5000"
       - "EUREKA_HOST=eureka"
     env_file:
-      - zuul_secrets.env
+      - api-gateway_secrets.env
     restart: on-failure
     depends_on:
       - config
@@ -87,15 +79,11 @@ services:
       - 9411:9411
       
   users-ws:
-    image: photo-app-users-ws:v1
+    image: photo-app-users-ws:v2
     build: ../photoAppApiUsers
     mem_limit: 400m
     environment:
-      - spring.cloud.config.uri=http://config:8012
-      # Con esta opción puesta a true, por defecto hace 6 reintentos de conexión con el servidor de configuraciones
-      - spring.cloud.config.fail-fast=true
-      # Por defecto son 1000 ms
-      # - spring.cloud.config.retry.initial-interval=5000
+      - spring.config.import=configserver:http://config:8012
       - spring.rabbitmq.host=rabbitmq
       - spring.cloud.bus.enabled=true
         # Como hemos activado Spring Cloud Bus y usamos Spring Boot Actuator, también activamos la comprobación de salud de RabbitMQ
@@ -103,9 +91,7 @@ services:
       - logging.file.name=/api-logs/users-ws.log
       - EUREKA_HOST=eureka
       - MYSQL_HOST=mysql
-      - GATEWAY_IP=zuul
-      # Por defecto, la consola de H2 esta desactivada
-      - spring.h2.console.enabled=true
+      - GATEWAY_IP=api-gateway
       - spring.zipkin.base-url=http://zipkin:9411
     env_file:
       - users-ws_secrets.env
@@ -120,16 +106,15 @@ services:
       - zipkin
       
   albums-ws:
-    image: photo-app-albums-ws:v1
+    image: photo-app-albums-ws:v2
     build: ../photoAppApiAlbums
     mem_limit: 400m
     environment:
-      spring.cloud.config.uri: http://config:8012
-      spring.cloud.config.fail-fast: true
-      # Por defecto son 1000 ms
-      #spring.cloud.config.retry.initial-interval: 5000
+      spring.config.import: configserver:http://config:8012
       spring.rabbitmq.host: rabbitmq
       spring.cloud.bus.enabled: true
+      # Como hemos activado Spring Cloud Bus y usamos Spring Boot Actuator, también activamos la comprobación de salud de RabbitMQ
+      management.health.rabbit.enabled: true
       logging.file.name: /api-logs/albums-ws.log
       EUREKA_HOST: eureka
       spring.zipkin.base-url: http://zipkin:9411

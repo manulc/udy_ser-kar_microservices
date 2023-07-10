@@ -35,7 +35,7 @@ public class UserServiceImpl implements UserService {
 	private AlbumService albumService;
 	
 	public UserServiceImpl(UserRepository userRepository, ModelMapper modelMapper, PasswordEncoder passwordEncoder,
-			@Qualifier("albumServiceFeignImpl") AlbumService albumService, Environment env) {
+			@Qualifier("albumServiceRestTemplateImpl") AlbumService albumService, Environment env) {
 		this.userRepository = userRepository;
 		this.modelMapper = modelMapper;
 		this.passwordEncoder = passwordEncoder;

@@ -1,13 +1,17 @@
 package com.mlorenzo.photoapp.api.users.security;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.springframework.core.env.Environment;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -35,7 +39,7 @@ public class AuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 		this.userService = userService;
 		this.environment = environment;
 	}
-	
+
 	@Override
 	public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
 			throws AuthenticationException {
@@ -50,17 +54,20 @@ public class AuthenticationFilter extends UsernamePasswordAuthenticationFilter {
 			throw new RuntimeException(e);
 		}
 	}
-
+	
 	@Override
 	protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain,
 			Authentication authResult) throws IOException, ServletException {		
 		String username = ((User)authResult.getPrincipal()).getUsername(); // username = email
 		// Tenemos que volver a la base de datos porque se necesita el userId para el subject del token JWT
 		UserResponseModel userDetails = userService.getUserDetailsByEmail(username);
+		Instant now = Instant.now();
+		SecretKey secretKey = new SecretKeySpec(Base64.getEncoder().encode(environment.getProperty("token.secret").getBytes()), SignatureAlgorithm.HS512.getJcaName());
 		String jwtToken = Jwts.builder()
 				.setSubject(userDetails.getUserId())
-				.setExpiration(new Date(System.currentTimeMillis() + Long.parseLong(environment.getProperty("token.expiration_time"))))
-				.signWith(SignatureAlgorithm.HS512, Base64.getEncoder().encode(environment.getProperty("token.secret").getBytes()))
+				.setExpiration(Date.from(now.plusMillis(Long.parseLong(environment.getProperty("token.expiration_time")))))
+				.setIssuedAt(Date.from(now))
+				.signWith(secretKey)
 				.compact();
 		response.addHeader("token", jwtToken);
 		response.addHeader("userId", userDetails.getUserId());
