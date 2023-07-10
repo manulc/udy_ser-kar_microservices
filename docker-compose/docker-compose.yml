@@ -104,8 +104,6 @@ services:
       - EUREKA_HOST=eureka
       - MYSQL_HOST=mysql
       - GATEWAY_IP=zuul
-      # Por defecto, la consola de H2 esta desactivada
-      - spring.h2.console.enabled=true
       - spring.zipkin.base-url=http://zipkin:9411
     env_file:
       - users-ws_secrets.env
